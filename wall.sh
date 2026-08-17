@@ -9,11 +9,13 @@ NC='\033[0m'
 REPO_PATH="$HOME/BYPASS-WALL/com.dts.freefireth"
 PACKAGE="com.dts.freefireth"
 DATA_PATH="/storage/emulated/0/Android/data/$PACKAGE"
+BACKUP_PATH="/data/local/tmp/wall_backup"
 DEVICE_IP=""
 PAIR_PORT=""
 CONNECT_PORT="5555"
 PAIR_CODE=""
 CONNECTED=0
+BACKUP_EXISTS=0
 
 error() { echo -e "${RED}[ERROR] $1${NC}"; exit 1; }
 info() { echo -e "${BLUE}[*] $1${NC}"; }
@@ -42,6 +44,22 @@ conectar() {
     if adb devices | grep -w "$DEVICE_IP:$CONNECT_PORT" >/dev/null; then
         CONNECTED=1
         success "Conectado"
+
+        # Verificar si ya existe backup
+        if adb shell "[ -d $BACKUP_PATH ]" >/dev/null 2>&1; then
+            BACKUP_EXISTS=1
+            info "Backup ya existe, no se repite"
+        else
+            info "Creando backup de los archivos originales del juego..."
+            adb shell "mkdir -p $BACKUP_PATH" >/dev/null 2>&1
+            adb pull "$DATA_PATH/" "$BACKUP_PATH/" >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                BACKUP_EXISTS=1
+                success "Backup guardado en $BACKUP_PATH"
+            else
+                warning "No se pudo hacer backup (puede que la carpeta este vacia)"
+            fi
+        fi
     else
         warning "No conectado"
     fi
@@ -52,6 +70,19 @@ inyectar() {
     clear
     echo "=========== INYECTANDO ==========="
     [ $CONNECTED -eq 0 ] && warning "Conectate primero" && read -p "Enter..." && return 1
+
+    # Si no hay backup, intentar hacerlo antes de inyectar
+    if [ $BACKUP_EXISTS -eq 0 ]; then
+        info "Creando backup antes de inyectar..."
+        adb shell "mkdir -p $BACKUP_PATH" >/dev/null 2>&1
+        adb pull "$DATA_PATH/" "$BACKUP_PATH/" >/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            BACKUP_EXISTS=1
+            success "Backup guardado"
+        else
+            warning "No se pudo hacer backup, continuando igual"
+        fi
+    fi
 
     adb shell am force-stop $PACKAGE >/dev/null 2>&1
     adb shell "mkdir -p $DATA_PATH" >/dev/null 2>&1
@@ -66,14 +97,26 @@ bypass() {
     clear
     echo "=========== BYPASS ==========="
     [ $CONNECTED -eq 0 ] && warning "Conectate primero" && read -p "Enter..." && return 1
-    if [ -f "$REPO_PATH/bypass.sh" ]; then
-        adb push "$REPO_PATH/bypass.sh" /data/local/tmp/ >/dev/null 2>&1
-        adb shell chmod +x /data/local/tmp/bypass.sh >/dev/null 2>&1
-        adb shell sh /data/local/tmp/bypass.sh >/dev/null 2>&1
-        success "Bypass ejecutado"
+
+    if [ $BACKUP_EXISTS -eq 1 ]; then
+        info "Restaurando archivos originales desde backup..."
+        adb shell am force-stop $PACKAGE >/dev/null 2>&1
+        adb shell "rm -rf $DATA_PATH" >/dev/null 2>&1
+        adb push "$BACKUP_PATH/." "$DATA_PATH/" >/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            success "Archivos originales restaurados"
+            # Eliminar backup después de restaurar
+            adb shell "rm -rf $BACKUP_PATH" >/dev/null 2>&1
+            BACKUP_EXISTS=0
+            success "Backup eliminado"
+        else
+            warning "Error al restaurar"
+        fi
     else
-        warning "No hay bypass.sh"
+        warning "No hay backup disponible. Conectate primero para crearlo."
     fi
+
+    adb shell monkey -p $PACKAGE -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
     read -p "Enter..."
 }
 
