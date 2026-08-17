@@ -8,8 +8,10 @@ NC='\033[0m'
 
 REPO_PATH="$HOME/BYPASS-WALL/com.dts.freefireth"
 PACKAGE="com.dts.freefireth"
-ADB_PORT=5555
 DEVICE_IP=""
+PAIR_PORT=""
+CONNECT_PORT="5555"
+PAIR_CODE=""
 CONNECTED=0
 
 error() { echo -e "${RED}[ERROR] $1${NC}"; exit 1; }
@@ -23,31 +25,40 @@ check_deps() {
 }
 
 conectar() {
-    if [ $CONNECTED -eq 1 ] && [ ! -z "$DEVICE_IP" ]; then
+    if [ $CONNECTED -eq 1 ]; then
         warning "Ya conectado a $DEVICE_IP"
         return 0
     fi
-    if [ -z "$DEVICE_IP" ]; then
-        read -p "IP del dispositivo destino: " DEVICE_IP
+    read -p "IP del dispositivo (ej. 192.168.1.10): " DEVICE_IP
+    read -p "Puerto de emparejamiento (ej. 37000): " PAIR_PORT
+    read -p "Puerto de conexion (ej. 5555, por defecto 5555): " CONNECT_PORT
+    CONNECT_PORT=${CONNECT_PORT:-5555}
+    read -p "Codigo de emparejamiento (6 digitos): " PAIR_CODE
+
+    info "Emparejando con $DEVICE_IP:$PAIR_PORT ..."
+    adb pair $DEVICE_IP:$PAIR_PORT $PAIR_CODE
+    if [ $? -ne 0 ]; then
+        warning "Fallo el emparejamiento. Verifica codigo y puerto."
+        return 1
     fi
-    info "Conectando a $DEVICE_IP:$ADB_PORT ..."
-    adb connect "$DEVICE_IP:$ADB_PORT" 2>/dev/null
+
+    info "Conectando a $DEVICE_IP:$CONNECT_PORT ..."
+    adb connect $DEVICE_IP:$CONNECT_PORT
     sleep 1
-    if adb devices | grep -w "$DEVICE_IP:$ADB_PORT" >/dev/null; then
+    if adb devices | grep -w "$DEVICE_IP:$CONNECT_PORT" >/dev/null; then
         CONNECTED=1
         success "Conectado a $DEVICE_IP"
-        return 0
     else
         CONNECTED=0
         DEVICE_IP=""
-        warning "Fallo la conexion. Verifica depuracion inalambrica."
+        warning "Fallo la conexion"
         return 1
     fi
 }
 
 desconectar() {
     if [ $CONNECTED -eq 1 ]; then
-        adb disconnect "$DEVICE_IP:$ADB_PORT" 2>/dev/null
+        adb disconnect $DEVICE_IP:$CONNECT_PORT 2>/dev/null
         CONNECTED=0
         DEVICE_IP=""
         success "Desconectado"
@@ -59,46 +70,32 @@ desconectar() {
 inyectar() {
     clear
     echo "=========== INYECTANDO ==========="
-    if [ $CONNECTED -eq 0 ]; then
-        warning "No estas conectado. Ve a CONECTAR primero."
-        return 1
-    fi
+    [ $CONNECTED -eq 0 ] && warning "Conectate primero" && return 1
     info "Deteniendo $PACKAGE ..."
     adb shell am force-stop $PACKAGE
     info "Creando directorio..."
     adb shell "mkdir -p /data/data/$PACKAGE/files/"
-    info "Copiando archivos de $REPO_PATH ..."
+    info "Copiando archivos..."
     adb push "$REPO_PATH/"* /data/data/$PACKAGE/files/ 2>/dev/null
-    if [ $? -eq 0 ]; then
-        success "Archivos copiados"
-    else
-        warning "Error en copia, pero puede que ya existan"
-    fi
+    [ $? -eq 0 ] && success "Archivos copiados" || warning "Error en copia"
     adb shell chmod -R 755 "/data/data/$PACKAGE/files/"
-    info "Abriendo Free Fire ..."
+    info "Abriendo Free Fire..."
     adb shell am start -n $PACKAGE/.SplashActivity 2>/dev/null
-    if [ $? -eq 0 ]; then
-        success "Free Fire iniciado"
-    else
-        warning "No se pudo abrir, abrelo manual"
-    fi
+    [ $? -eq 0 ] && success "Free Fire iniciado" || warning "No se pudo abrir"
     read -p "Presiona Enter para volver..."
 }
 
 bypass() {
     clear
     echo "=========== BYPASS ==========="
-    if [ $CONNECTED -eq 0 ]; then
-        warning "Conectate primero"
-        return 1
-    fi
+    [ $CONNECTED -eq 0 ] && warning "Conectate primero" && return 1
     if [ -f "$REPO_PATH/bypass.sh" ]; then
         adb push "$REPO_PATH/bypass.sh" /data/local/tmp/
         adb shell chmod +x /data/local/tmp/bypass.sh
         adb shell sh /data/local/tmp/bypass.sh
         success "Bypass ejecutado"
     else
-        warning "No hay bypass.sh, no hago nada"
+        warning "No hay bypass.sh"
     fi
     read -p "Presiona Enter para volver..."
 }
@@ -106,11 +103,7 @@ bypass() {
 reiniciar() {
     clear
     echo "=========== REINICIAR ==========="
-    if [ $CONNECTED -eq 0 ]; then
-        warning "Conectate primero"
-        return 1
-    fi
-    info "Reiniciando dispositivo..."
+    [ $CONNECTED -eq 0 ] && warning "Conectate primero" && return 1
     adb reboot
     success "Reinicio enviado"
     CONNECTED=0
@@ -127,14 +120,10 @@ menu() {
     echo "========================================"
     printf '\033[0m'
     echo
-    if [ $CONNECTED -eq 1 ]; then
-        echo -e "[*] Estado: ${GREEN}CONECTADO${NC} a $DEVICE_IP"
-    else
-        echo -e "[*] Estado: ${RED}DESCONECTADO${NC}"
-    fi
+    [ $CONNECTED -eq 1 ] && echo -e "[*] Estado: ${GREEN}CONECTADO${NC} a $DEVICE_IP" || echo -e "[*] Estado: ${RED}DESCONECTADO${NC}"
     echo
     echo "=========== MENU ==========="
-    echo "1) CONECTAR"
+    echo "1) CONECTAR (pair + connect)"
     echo "2) INYECTAR"
     echo "3) BYPASS"
     echo "4) REINICIAR"
