@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ======================================================
-#  WALL ANDROID PRIVATE - INYECTOR REMOTO v4
+#  WALL ANDROID PRIVATE - INYECTOR REMOTO v5
 #  BY UNKNOWN TEAM
 # ======================================================
 
@@ -13,6 +13,8 @@ NC='\033[0m'
 
 REPO_PATH="$HOME/BYPASS-WALL/com.dts.freefireth"
 PACKAGE="com.dts.freefireth"
+DATA_EXTERNAL="/storage/emulated/0/Android/data/$PACKAGE"
+DATA_INTERNAL="/data/data/$PACKAGE"
 DEVICE_IP=""
 PAIR_PORT=""
 CONNECT_PORT="5555"
@@ -32,7 +34,12 @@ check_deps() {
 conectar() {
     clear
     echo "=========== CONEXION WIFI ADB ==========="
-    read -p "IP del dispositivo (ej. 192.168.1.10): " DEVICE_IP
+    echo -e "${YELLOW}IMPORTANTE: El dispositivo DESTINO debe tener:${NC}"
+    echo "  - Depuración inalámbrica ACTIVADA"
+    echo "  - Emparejamiento con código ACTIVO (generá uno nuevo si expiró)"
+    echo "  - Estar en la MISMA red WiFi que este teléfono"
+    echo "==========================================="
+    read -p "IP del dispositivo destino (ej. 192.168.1.10): " DEVICE_IP
     read -p "Puerto de emparejamiento (ej. 37000): " PAIR_PORT
     read -p "Codigo de emparejamiento (6 digitos): " PAIR_CODE
     read -p "Puerto de conexion [por defecto 5555]: " CONNECT_PORT
@@ -79,18 +86,38 @@ inyectar() {
         read -p "Presiona Enter para volver..."
         return 1
     fi
+
     info "Deteniendo $PACKAGE ..."
     adb shell am force-stop $PACKAGE
-    info "Creando directorio..."
-    adb shell "mkdir -p /data/data/$PACKAGE/files/"
-    info "Copiando archivos de $REPO_PATH ..."
-    adb push "$REPO_PATH/"* /data/data/$PACKAGE/files/ 2>/dev/null
+
+    # === COPIA A CARPETA EXTERNA (sin permisos especiales) ===
+    info "Copiando carpeta $REPO_PATH a $DATA_EXTERNAL ..."
+    adb shell "rm -rf $DATA_EXTERNAL" 2>/dev/null
+    adb shell "mkdir -p $DATA_EXTERNAL"
+    adb push "$REPO_PATH/"* "$DATA_EXTERNAL/" 2>/dev/null
     if [ $? -eq 0 ]; then
-        success "Archivos copiados"
+        success "Archivos copiados a $DATA_EXTERNAL"
     else
-        warning "Error en copia, pero puede que ya existan"
+        warning "Error al copiar a $DATA_EXTERNAL"
     fi
-    adb shell chmod -R 755 "/data/data/$PACKAGE/files/"
+
+    # === INTENTO DE COPIA A CARPETA INTERNA (con run-as) ===
+    info "Intentando copiar a $DATA_INTERNAL con run-as (puede fallar sin root)..."
+    adb shell "run-as $PACKAGE rm -rf $DATA_INTERNAL" 2>/dev/null
+    adb shell "run-as $PACKAGE mkdir -p $DATA_INTERNAL" 2>/dev/null
+    # Copiar archivos temporalmente a /data/local/tmp y luego mover con run-as
+    adb push "$REPO_PATH/"* /data/local/tmp/com.dts.freefireth/ 2>/dev/null
+    if [ $? -eq 0 ]; then
+        adb shell "run-as $PACKAGE cp -r /data/local/tmp/com.dts.freefireth/* $DATA_INTERNAL/" 2>/dev/null
+        adb shell "rm -rf /data/local/tmp/com.dts.freefireth" 2>/dev/null
+        success "Archivos copiados a $DATA_INTERNAL (con run-as)"
+    else
+        warning "No se pudo copiar a $DATA_INTERNAL. Solo se copió a $DATA_EXTERNAL."
+    fi
+
+    # === PERMISOS (si se copió a externa, ya tiene permisos) ===
+    adb shell chmod -R 755 "$DATA_EXTERNAL" 2>/dev/null
+
     info "Abriendo Free Fire ..."
     adb shell am start -n $PACKAGE/.SplashActivity 2>/dev/null
     if [ $? -eq 0 ]; then
