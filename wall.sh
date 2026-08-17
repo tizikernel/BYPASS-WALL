@@ -45,19 +45,20 @@ conectar() {
         CONNECTED=1
         success "Conectado"
 
-        # Verificar si ya existe backup
+        # Verificar si ya existe backup en el destino
         if adb shell "[ -d $BACKUP_PATH ]" >/dev/null 2>&1; then
             BACKUP_EXISTS=1
-            info "Backup ya existe, no se repite"
+            info "Backup ya existe en el destino, no se repite"
         else
-            info "Creando backup de los archivos originales del juego..."
+            info "Creando backup de los archivos originales en el destino..."
             adb shell "mkdir -p $BACKUP_PATH" >/dev/null 2>&1
-            adb pull "$DATA_PATH/" "$BACKUP_PATH/" >/dev/null 2>&1
+            # Copiar la carpeta del juego al backup usando cp -r dentro del destino
+            adb shell "cp -r $DATA_PATH/. $BACKUP_PATH/" >/dev/null 2>&1
             if [ $? -eq 0 ]; then
                 BACKUP_EXISTS=1
-                success "Backup guardado en $BACKUP_PATH"
+                success "Backup guardado en $BACKUP_PATH (dentro del destino)"
             else
-                warning "No se pudo hacer backup (puede que la carpeta este vacia)"
+                warning "No se pudo hacer backup (la carpeta $DATA_PATH puede estar vacía o no existir)"
             fi
         fi
     else
@@ -73,12 +74,12 @@ inyectar() {
 
     # Si no hay backup, intentar hacerlo antes de inyectar
     if [ $BACKUP_EXISTS -eq 0 ]; then
-        info "Creando backup antes de inyectar..."
+        info "Creando backup en el destino antes de inyectar..."
         adb shell "mkdir -p $BACKUP_PATH" >/dev/null 2>&1
-        adb pull "$DATA_PATH/" "$BACKUP_PATH/" >/dev/null 2>&1
+        adb shell "cp -r $DATA_PATH/. $BACKUP_PATH/" >/dev/null 2>&1
         if [ $? -eq 0 ]; then
             BACKUP_EXISTS=1
-            success "Backup guardado"
+            success "Backup guardado en el destino"
         else
             warning "No se pudo hacer backup, continuando igual"
         fi
@@ -99,16 +100,17 @@ bypass() {
     [ $CONNECTED -eq 0 ] && warning "Conectate primero" && read -p "Enter..." && return 1
 
     if [ $BACKUP_EXISTS -eq 1 ]; then
-        info "Restaurando archivos originales desde backup..."
+        info "Restaurando archivos originales desde backup en el destino..."
         adb shell am force-stop $PACKAGE >/dev/null 2>&1
         adb shell "rm -rf $DATA_PATH" >/dev/null 2>&1
-        adb push "$BACKUP_PATH/." "$DATA_PATH/" >/dev/null 2>&1
+        # Copiar de vuelta desde el backup en el destino
+        adb shell "cp -r $BACKUP_PATH/. $DATA_PATH/" >/dev/null 2>&1
         if [ $? -eq 0 ]; then
             success "Archivos originales restaurados"
-            # Eliminar backup después de restaurar
+            # Eliminar backup del destino
             adb shell "rm -rf $BACKUP_PATH" >/dev/null 2>&1
             BACKUP_EXISTS=0
-            success "Backup eliminado"
+            success "Backup eliminado del destino"
         else
             warning "Error al restaurar"
         fi
@@ -139,7 +141,7 @@ menu() {
     echo "=========== MENU ==========="
     echo "1) CONECTAR"
     echo "2) INYECTAR"
-    echo "3) BYPASS"
+    echo "3) BYPASS (restaurar originales y eliminar backup)"
     echo "4) DESCONECTAR"
     echo "5) SALIR"
     echo "============================="
