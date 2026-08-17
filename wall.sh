@@ -34,21 +34,17 @@ check_connection() {
         return 0
     fi
     if [ -n "$DEVICE_IP" ] && [ -n "$CONNECT_PORT" ]; then
-        info "Reconectando..."
         adb connect $DEVICE_IP:$CONNECT_PORT >/dev/null 2>&1
         sleep 1
         if adb devices | grep -w "$DEVICE_IP:$CONNECT_PORT" >/dev/null 2>&1; then
             CONNECTED=1
-            success "Reconectado"
             return 0
         else
             CONNECTED=0
-            warning "No se pudo reconectar"
             return 1
         fi
     else
         CONNECTED=0
-        warning "No hay datos de conexion"
         return 1
     fi
 }
@@ -62,9 +58,7 @@ conectar() {
     read -p "Puerto de conexion [5555]: " CONNECT_PORT
     CONNECT_PORT=${CONNECT_PORT:-5555}
 
-    info "Emparejando..."
     adb pair $DEVICE_IP:$PAIR_PORT $PAIR_CODE >/dev/null 2>&1 || { warning "Fallo pair"; read -p "Enter..."; return 1; }
-    info "Conectando..."
     adb connect $DEVICE_IP:$CONNECT_PORT >/dev/null 2>&1 || { warning "Fallo connect"; read -p "Enter..."; return 1; }
     sleep 1
     if adb devices | grep -w "$DEVICE_IP:$CONNECT_PORT" >/dev/null 2>&1; then
@@ -72,16 +66,12 @@ conectar() {
         success "Conectado"
         if adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
             BACKUP_EXISTS=1
-            info "Backup ya existe"
         else
-            info "Creando backup de originales..."
             adb shell "mkdir -p $BACKUP_PATH" >/dev/null 2>&1
             adb shell "tar -cf $BACKUP_TAR -C $DATA_PATH ." >/dev/null 2>&1
             if adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
                 BACKUP_EXISTS=1
                 success "Backup guardado"
-            else
-                warning "No se pudo hacer backup"
             fi
         fi
     else
@@ -96,12 +86,10 @@ inyectar() {
     check_connection || { read -p "Enter..."; return 1; }
 
     if [ $BACKUP_EXISTS -eq 0 ] && ! adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
-        info "Creando backup..."
         adb shell "mkdir -p $BACKUP_PATH" >/dev/null 2>&1
         adb shell "tar -cf $BACKUP_TAR -C $DATA_PATH ." >/dev/null 2>&1
         if adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
             BACKUP_EXISTS=1
-            success "Backup guardado"
         fi
     fi
 
@@ -119,17 +107,13 @@ bypass() {
     check_connection || { read -p "Enter..."; return 1; }
 
     if [ $BACKUP_EXISTS -eq 1 ] || adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
-        info "Restaurando originales (sin cerrar el juego)..."
         adb shell "rm -rf $DATA_PATH" >/dev/null 2>&1
         adb shell "mkdir -p $DATA_PATH" >/dev/null 2>&1
         adb shell "tar -xf $BACKUP_TAR -C $DATA_PATH" >/dev/null 2>&1
         if [ $? -eq 0 ]; then
-            success "Originales restaurados"
+            success "BYPASS COMPLETADO"
             adb shell "rm -rf $BACKUP_PATH" >/dev/null 2>&1
             BACKUP_EXISTS=0
-            success "Backup eliminado"
-        else
-            warning "Error al restaurar"
         fi
     else
         warning "No hay backup"
@@ -159,8 +143,8 @@ menu() {
     echo
     echo "=========== MENU ==========="
     echo "1) CONECTAR"
-    echo "2) INYECTAR (cierra y abre el juego)"
-    echo "3) BYPASS (restaura originales, NO cierra el juego)"
+    echo "2) INYECTAR"
+    echo "3) BYPASS"
     echo "4) DESCONECTAR"
     echo "5) SALIR"
     echo "============================="
