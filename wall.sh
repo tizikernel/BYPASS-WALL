@@ -29,14 +29,12 @@ check_deps() {
     [ -d "$REPO_PATH" ] || error "Repo no encontrado en $REPO_PATH"
 }
 
-# Función para verificar y reconectar automáticamente
 check_connection() {
     if [ $CONNECTED -eq 1 ] && adb devices | grep -w "$DEVICE_IP:$CONNECT_PORT" >/dev/null 2>&1; then
         return 0
     fi
-
     if [ -n "$DEVICE_IP" ] && [ -n "$CONNECT_PORT" ]; then
-        info "Intentando reconectar automaticamente..."
+        info "Reconectando..."
         adb connect $DEVICE_IP:$CONNECT_PORT >/dev/null 2>&1
         sleep 1
         if adb devices | grep -w "$DEVICE_IP:$CONNECT_PORT" >/dev/null 2>&1; then
@@ -45,12 +43,12 @@ check_connection() {
             return 0
         else
             CONNECTED=0
-            warning "No se pudo reconectar. Ve a CONECTAR."
+            warning "No se pudo reconectar"
             return 1
         fi
     else
         CONNECTED=0
-        warning "No hay datos de conexion. Ve a CONECTAR."
+        warning "No hay datos de conexion"
         return 1
     fi
 }
@@ -72,20 +70,18 @@ conectar() {
     if adb devices | grep -w "$DEVICE_IP:$CONNECT_PORT" >/dev/null 2>&1; then
         CONNECTED=1
         success "Conectado"
-
-        # Backup si no existe
         if adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
             BACKUP_EXISTS=1
             info "Backup ya existe"
         else
-            info "Creando backup de originales en el destino..."
+            info "Creando backup de originales..."
             adb shell "mkdir -p $BACKUP_PATH" >/dev/null 2>&1
             adb shell "tar -cf $BACKUP_TAR -C $DATA_PATH ." >/dev/null 2>&1
             if adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
                 BACKUP_EXISTS=1
                 success "Backup guardado"
             else
-                warning "No se pudo hacer backup (carpeta vacia o sin datos)"
+                warning "No se pudo hacer backup"
             fi
         fi
     else
@@ -99,23 +95,19 @@ inyectar() {
     echo "=========== INYECTANDO ==========="
     check_connection || { read -p "Enter..."; return 1; }
 
-    # Backup si no existe
     if [ $BACKUP_EXISTS -eq 0 ] && ! adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
-        info "Creando backup antes de inyectar..."
+        info "Creando backup..."
         adb shell "mkdir -p $BACKUP_PATH" >/dev/null 2>&1
         adb shell "tar -cf $BACKUP_TAR -C $DATA_PATH ." >/dev/null 2>&1
         if adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
             BACKUP_EXISTS=1
             success "Backup guardado"
-        else
-            warning "No se pudo hacer backup, continuando"
         fi
     fi
 
     adb shell am force-stop $PACKAGE >/dev/null 2>&1
     adb shell "mkdir -p $DATA_PATH" >/dev/null 2>&1
     adb push "$REPO_PATH/." "$DATA_PATH/" >/dev/null 2>&1
-
     success "WALL INYECTADO CON EXITO"
     adb shell monkey -p $PACKAGE -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
     read -p "Presiona Enter para volver..."
@@ -127,8 +119,7 @@ bypass() {
     check_connection || { read -p "Enter..."; return 1; }
 
     if [ $BACKUP_EXISTS -eq 1 ] || adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
-        info "Restaurando originales desde backup..."
-        adb shell am force-stop $PACKAGE >/dev/null 2>&1
+        info "Restaurando originales (sin cerrar el juego)..."
         adb shell "rm -rf $DATA_PATH" >/dev/null 2>&1
         adb shell "mkdir -p $DATA_PATH" >/dev/null 2>&1
         adb shell "tar -xf $BACKUP_TAR -C $DATA_PATH" >/dev/null 2>&1
@@ -141,10 +132,8 @@ bypass() {
             warning "Error al restaurar"
         fi
     else
-        warning "No hay backup. Conectate primero."
+        warning "No hay backup"
     fi
-
-    adb shell monkey -p $PACKAGE -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
     read -p "Enter..."
 }
 
@@ -170,8 +159,8 @@ menu() {
     echo
     echo "=========== MENU ==========="
     echo "1) CONECTAR"
-    echo "2) INYECTAR"
-    echo "3) BYPASS (restaurar originales)"
+    echo "2) INYECTAR (cierra y abre el juego)"
+    echo "3) BYPASS (restaura originales, NO cierra el juego)"
     echo "4) DESCONECTAR"
     echo "5) SALIR"
     echo "============================="
