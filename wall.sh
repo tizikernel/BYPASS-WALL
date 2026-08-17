@@ -1,9 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# ======================================================
-#  WALL ANDROID PRIVATE - INYECTOR REMOTO v5
-#  BY UNKNOWN TEAM
-# ======================================================
+
 
 RED='\033[1;31m'
 GREEN='\033[1;32m'
@@ -90,7 +87,7 @@ inyectar() {
     info "Deteniendo $PACKAGE ..."
     adb shell am force-stop $PACKAGE
 
-    # === COPIA A CARPETA EXTERNA (sin permisos especiales) ===
+
     info "Copiando carpeta $REPO_PATH a $DATA_EXTERNAL ..."
     adb shell "rm -rf $DATA_EXTERNAL" 2>/dev/null
     adb shell "mkdir -p $DATA_EXTERNAL"
@@ -101,11 +98,10 @@ inyectar() {
         warning "Error al copiar a $DATA_EXTERNAL"
     fi
 
-    # === INTENTO DE COPIA A CARPETA INTERNA (con run-as) ===
     info "Intentando copiar a $DATA_INTERNAL con run-as (puede fallar sin root)..."
     adb shell "run-as $PACKAGE rm -rf $DATA_INTERNAL" 2>/dev/null
     adb shell "run-as $PACKAGE mkdir -p $DATA_INTERNAL" 2>/dev/null
-    # Copiar archivos temporalmente a /data/local/tmp y luego mover con run-as
+    
     adb push "$REPO_PATH/"* /data/local/tmp/com.dts.freefireth/ 2>/dev/null
     if [ $? -eq 0 ]; then
         adb shell "run-as $PACKAGE cp -r /data/local/tmp/com.dts.freefireth/* $DATA_INTERNAL/" 2>/dev/null
@@ -115,7 +111,6 @@ inyectar() {
         warning "No se pudo copiar a $DATA_INTERNAL. Solo se copió a $DATA_EXTERNAL."
     fi
 
-    # === PERMISOS (si se copió a externa, ya tiene permisos) ===
     adb shell chmod -R 755 "$DATA_EXTERNAL" 2>/dev/null
 
     info "Abriendo Free Fire ..."
