@@ -1,134 +1,121 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# ======================================================
-#  WALL ANDROID PRIVATE - INYECTOR REMOTO v3
-#  BY UNKNOWN TEAM
-# ======================================================
-
-# Colores
 RED='\033[1;31m'
 GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[1;36m'
 NC='\033[0m'
 
-# Variables globales
 REPO_PATH="$HOME/BYPASS-WALL/com.dts.freefireth"
 PACKAGE="com.dts.freefireth"
 ADB_PORT=5555
 DEVICE_IP=""
 CONNECTED=0
 
-error() {
-    echo -e "${RED}[ERROR] $1${NC}"
-    exit 1
-}
-
-info() {
-    echo -e "${BLUE}[*] $1${NC}"
-}
-
-success() {
-    echo -e "${GREEN}[✔] $1${NC}"
-}
-
-warning() {
-    echo -e "${YELLOW}[!] $1${NC}"
-}
+error() { echo -e "${RED}[ERROR] $1${NC}"; exit 1; }
+info() { echo -e "${BLUE}[*] $1${NC}"; }
+success() { echo -e "${GREEN}[✔] $1${NC}"; }
+warning() { echo -e "${YELLOW}[!] $1${NC}"; }
 
 check_deps() {
-    command -v adb >/dev/null 2>&1 || error "ADB no instalado. Ejecuta: pkg install android-tools"
-    [ -d "$REPO_PATH" ] || error "No se encuentra el repositorio en $REPO_PATH. Asegúrate de tener clonado y copiado los archivos."
+    command -v adb >/dev/null 2>&1 || error "ADB no instalado. pkg install android-tools"
+    [ -d "$REPO_PATH" ] || error "Repo no encontrado en $REPO_PATH"
 }
 
 conectar() {
+    if [ $CONNECTED -eq 1 ] && [ ! -z "$DEVICE_IP" ]; then
+        warning "Ya conectado a $DEVICE_IP"
+        return 0
+    fi
     if [ -z "$DEVICE_IP" ]; then
-        read -p "Introduce la IP del dispositivo destino (ej. 192.168.1.10): " DEVICE_IP
+        read -p "IP del dispositivo destino: " DEVICE_IP
     fi
     info "Conectando a $DEVICE_IP:$ADB_PORT ..."
     adb connect "$DEVICE_IP:$ADB_PORT" 2>/dev/null
-    if [ $? -ne 0 ]; then
-        warning "No se pudo conectar. Verifica que la depuración inalámbrica esté activa en el destino."
+    sleep 1
+    if adb devices | grep -w "$DEVICE_IP:$ADB_PORT" >/dev/null; then
+        CONNECTED=1
+        success "Conectado a $DEVICE_IP"
+        return 0
+    else
         CONNECTED=0
+        DEVICE_IP=""
+        warning "Fallo la conexion. Verifica depuracion inalambrica."
         return 1
     fi
-    adb devices | grep -w "$DEVICE_IP:$ADB_PORT" >/dev/null
-    if [ $? -ne 0 ]; then
-        warning "Dispositivo no autorizado. Acepta la conexión en el destino."
+}
+
+desconectar() {
+    if [ $CONNECTED -eq 1 ]; then
+        adb disconnect "$DEVICE_IP:$ADB_PORT" 2>/dev/null
         CONNECTED=0
-        return 1
+        DEVICE_IP=""
+        success "Desconectado"
+    else
+        warning "No hay conexion activa"
     fi
-    CONNECTED=1
-    success "Conectado a $DEVICE_IP"
-    return 0
 }
 
 inyectar() {
     clear
     echo "=========== INYECTANDO ==========="
-    conectar || return 1
-
-    info "Deteniendo Free Fire en el destino..."
-    adb shell am force-stop $PACKAGE
-
-    info "Creando directorio de datos en el destino..."
-    adb shell "mkdir -p /data/data/$PACKAGE/files/"
-
-    info "Copiando archivos de bypass desde $REPO_PATH a /data/data/$PACKAGE/files/ ..."
-    adb push "$REPO_PATH/"* /data/data/$PACKAGE/files/ 2>/dev/null
-    if [ $? -ne 0 ]; then
-        warning "Error al copiar algunos archivos. Puede que algunos ya existan."
-    else
-        success "Archivos copiados correctamente."
+    if [ $CONNECTED -eq 0 ]; then
+        warning "No estas conectado. Ve a CONECTAR primero."
+        return 1
     fi
-
-    info "Estableciendo permisos..."
+    info "Deteniendo $PACKAGE ..."
+    adb shell am force-stop $PACKAGE
+    info "Creando directorio..."
+    adb shell "mkdir -p /data/data/$PACKAGE/files/"
+    info "Copiando archivos de $REPO_PATH ..."
+    adb push "$REPO_PATH/"* /data/data/$PACKAGE/files/ 2>/dev/null
+    if [ $? -eq 0 ]; then
+        success "Archivos copiados"
+    else
+        warning "Error en copia, pero puede que ya existan"
+    fi
     adb shell chmod -R 755 "/data/data/$PACKAGE/files/"
-
-    info "Abriendo Free Fire automáticamente..."
+    info "Abriendo Free Fire ..."
     adb shell am start -n $PACKAGE/.SplashActivity 2>/dev/null
     if [ $? -eq 0 ]; then
-        success "Free Fire iniciado en el destino."
+        success "Free Fire iniciado"
     else
-        warning "No se pudo iniciar Free Fire. Inícialo manualmente."
+        warning "No se pudo abrir, abrelo manual"
     fi
-
-    echo "===================================="
-    read -p "Presiona Enter para volver al menú..."
+    read -p "Presiona Enter para volver..."
 }
 
 bypass() {
     clear
     echo "=========== BYPASS ==========="
-    conectar || return 1
-
+    if [ $CONNECTED -eq 0 ]; then
+        warning "Conectate primero"
+        return 1
+    fi
     if [ -f "$REPO_PATH/bypass.sh" ]; then
-        info "Subiendo y ejecutando bypass.sh ..."
         adb push "$REPO_PATH/bypass.sh" /data/local/tmp/
         adb shell chmod +x /data/local/tmp/bypass.sh
         adb shell sh /data/local/tmp/bypass.sh
-        success "Bypass ejecutado."
+        success "Bypass ejecutado"
     else
-        warning "No se encontró bypass.sh. Ejecutando comando genérico..."
-        adb shell settings put global hidden_api_policy 1
-        success "Comando genérico aplicado."
+        warning "No hay bypass.sh, no hago nada"
     fi
-
-    echo "===================================="
-    read -p "Presiona Enter para volver al menú..."
+    read -p "Presiona Enter para volver..."
 }
 
 reiniciar() {
     clear
-    echo "=========== REINICIAR DISPOSITIVO ==========="
-    conectar || return 1
-    info "Reiniciando el dispositivo destino..."
+    echo "=========== REINICIAR ==========="
+    if [ $CONNECTED -eq 0 ]; then
+        warning "Conectate primero"
+        return 1
+    fi
+    info "Reiniciando dispositivo..."
     adb reboot
-    success "Reinicio enviado. El dispositivo se apagará y encenderá."
+    success "Reinicio enviado"
     CONNECTED=0
     DEVICE_IP=""
-    echo "===================================="
-    read -p "Presiona Enter para volver al menú..."
+    read -p "Presiona Enter para volver..."
 }
 
 menu() {
@@ -140,27 +127,29 @@ menu() {
     echo "========================================"
     printf '\033[0m'
     echo
-    if [ $CONNECTED -eq 1 ] && [ ! -z "$DEVICE_IP" ]; then
+    if [ $CONNECTED -eq 1 ]; then
         echo -e "[*] Estado: ${GREEN}CONECTADO${NC} a $DEVICE_IP"
     else
         echo -e "[*] Estado: ${RED}DESCONECTADO${NC}"
     fi
     echo
     echo "=========== MENU ==========="
-    echo "1) INYECTAR (copiar archivos y abrir FF)"
-    echo "2) BYPASS (ejecutar script extra)"
-    echo "3) REINICIAR DISPOSITIVO"
-    echo "4) SALIR"
+    echo "1) CONECTAR"
+    echo "2) INYECTAR"
+    echo "3) BYPASS"
+    echo "4) REINICIAR"
+    echo "5) DESCONECTAR"
+    echo "6) SALIR"
     echo "============================="
-    echo
-    read -p "Elegí una opción: " op
-
-    case "$op" in
-        1) inyectar ;;
-        2) bypass ;;
-        3) reiniciar ;;
-        4) echo "Saliendo..."; exit 0 ;;
-        *) warning "Opción inválida"; sleep 1; menu ;;
+    read -p "Elegi una opcion: " op
+    case $op in
+        1) conectar ;;
+        2) inyectar ;;
+        3) bypass ;;
+        4) reiniciar ;;
+        5) desconectar ;;
+        6) echo "Saliendo..."; exit 0 ;;
+        *) warning "Opcion invalida"; sleep 1 ;;
     esac
     menu
 }
