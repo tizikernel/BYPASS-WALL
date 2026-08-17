@@ -10,6 +10,8 @@ REPO_PATH="$HOME/BYPASS-WALL/com.dts.freefireth"
 PACKAGE="com.dts.freefireth"
 DATA_PATH="/storage/emulated/0/Android/data/$PACKAGE"
 BACKUP_PATH="/data/local/tmp/wall_backup"
+BACKUP_TAR="$BACKUP_PATH/backup.tar"
+
 DEVICE_IP=""
 PAIR_PORT=""
 CONNECT_PORT="5555"
@@ -27,6 +29,32 @@ check_deps() {
     [ -d "$REPO_PATH" ] || error "Repo no encontrado en $REPO_PATH"
 }
 
+# Función para verificar y reconectar automáticamente
+check_connection() {
+    if [ $CONNECTED -eq 1 ] && adb devices | grep -w "$DEVICE_IP:$CONNECT_PORT" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [ -n "$DEVICE_IP" ] && [ -n "$CONNECT_PORT" ]; then
+        info "Intentando reconectar automaticamente..."
+        adb connect $DEVICE_IP:$CONNECT_PORT >/dev/null 2>&1
+        sleep 1
+        if adb devices | grep -w "$DEVICE_IP:$CONNECT_PORT" >/dev/null 2>&1; then
+            CONNECTED=1
+            success "Reconectado"
+            return 0
+        else
+            CONNECTED=0
+            warning "No se pudo reconectar. Ve a CONECTAR."
+            return 1
+        fi
+    else
+        CONNECTED=0
+        warning "No hay datos de conexion. Ve a CONECTAR."
+        return 1
+    fi
+}
+
 conectar() {
     clear
     echo "=========== CONEXION WIFI ADB ==========="
@@ -41,24 +69,23 @@ conectar() {
     info "Conectando..."
     adb connect $DEVICE_IP:$CONNECT_PORT >/dev/null 2>&1 || { warning "Fallo connect"; read -p "Enter..."; return 1; }
     sleep 1
-    if adb devices | grep -w "$DEVICE_IP:$CONNECT_PORT" >/dev/null; then
+    if adb devices | grep -w "$DEVICE_IP:$CONNECT_PORT" >/dev/null 2>&1; then
         CONNECTED=1
         success "Conectado"
 
-        # Verificar si ya existe backup en el destino
-        if adb shell "[ -d $BACKUP_PATH ]" >/dev/null 2>&1; then
+        # Backup si no existe
+        if adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
             BACKUP_EXISTS=1
-            info "Backup ya existe en el destino, no se repite"
+            info "Backup ya existe"
         else
-            info "Creando backup de los archivos originales en el destino..."
+            info "Creando backup de originales en el destino..."
             adb shell "mkdir -p $BACKUP_PATH" >/dev/null 2>&1
-            # Copiar la carpeta del juego al backup usando cp -r dentro del destino
-            adb shell "cp -r $DATA_PATH/. $BACKUP_PATH/" >/dev/null 2>&1
-            if [ $? -eq 0 ]; then
+            adb shell "tar -cf $BACKUP_TAR -C $DATA_PATH ." >/dev/null 2>&1
+            if adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
                 BACKUP_EXISTS=1
-                success "Backup guardado en $BACKUP_PATH (dentro del destino)"
+                success "Backup guardado"
             else
-                warning "No se pudo hacer backup (la carpeta $DATA_PATH puede estar vacía o no existir)"
+                warning "No se pudo hacer backup (carpeta vacia o sin datos)"
             fi
         fi
     else
@@ -70,18 +97,18 @@ conectar() {
 inyectar() {
     clear
     echo "=========== INYECTANDO ==========="
-    [ $CONNECTED -eq 0 ] && warning "Conectate primero" && read -p "Enter..." && return 1
+    check_connection || { read -p "Enter..."; return 1; }
 
-    # Si no hay backup, intentar hacerlo antes de inyectar
-    if [ $BACKUP_EXISTS -eq 0 ]; then
-        info "Creando backup en el destino antes de inyectar..."
+    # Backup si no existe
+    if [ $BACKUP_EXISTS -eq 0 ] && ! adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
+        info "Creando backup antes de inyectar..."
         adb shell "mkdir -p $BACKUP_PATH" >/dev/null 2>&1
-        adb shell "cp -r $DATA_PATH/. $BACKUP_PATH/" >/dev/null 2>&1
-        if [ $? -eq 0 ]; then
+        adb shell "tar -cf $BACKUP_TAR -C $DATA_PATH ." >/dev/null 2>&1
+        if adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
             BACKUP_EXISTS=1
-            success "Backup guardado en el destino"
+            success "Backup guardado"
         else
-            warning "No se pudo hacer backup, continuando igual"
+            warning "No se pudo hacer backup, continuando"
         fi
     fi
 
@@ -97,25 +124,24 @@ inyectar() {
 bypass() {
     clear
     echo "=========== BYPASS ==========="
-    [ $CONNECTED -eq 0 ] && warning "Conectate primero" && read -p "Enter..." && return 1
+    check_connection || { read -p "Enter..."; return 1; }
 
-    if [ $BACKUP_EXISTS -eq 1 ]; then
-        info "Restaurando archivos originales desde backup en el destino..."
+    if [ $BACKUP_EXISTS -eq 1 ] || adb shell "[ -f $BACKUP_TAR ]" >/dev/null 2>&1; then
+        info "Restaurando originales desde backup..."
         adb shell am force-stop $PACKAGE >/dev/null 2>&1
         adb shell "rm -rf $DATA_PATH" >/dev/null 2>&1
-        # Copiar de vuelta desde el backup en el destino
-        adb shell "cp -r $BACKUP_PATH/. $DATA_PATH/" >/dev/null 2>&1
+        adb shell "mkdir -p $DATA_PATH" >/dev/null 2>&1
+        adb shell "tar -xf $BACKUP_TAR -C $DATA_PATH" >/dev/null 2>&1
         if [ $? -eq 0 ]; then
-            success "Archivos originales restaurados"
-            # Eliminar backup del destino
+            success "Originales restaurados"
             adb shell "rm -rf $BACKUP_PATH" >/dev/null 2>&1
             BACKUP_EXISTS=0
-            success "Backup eliminado del destino"
+            success "Backup eliminado"
         else
             warning "Error al restaurar"
         fi
     else
-        warning "No hay backup disponible. Conectate primero para crearlo."
+        warning "No hay backup. Conectate primero."
     fi
 
     adb shell monkey -p $PACKAGE -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
@@ -136,12 +162,16 @@ menu() {
     echo "========================================"
     printf '\033[0m'
     echo
-    [ $CONNECTED -eq 1 ] && echo -e "[*] Estado: ${GREEN}CONECTADO${NC}" || echo -e "[*] Estado: ${RED}DESCONECTADO${NC}"
+    if check_connection >/dev/null 2>&1; then
+        echo -e "[*] Estado: ${GREEN}CONECTADO${NC}"
+    else
+        echo -e "[*] Estado: ${RED}DESCONECTADO${NC}"
+    fi
     echo
     echo "=========== MENU ==========="
     echo "1) CONECTAR"
     echo "2) INYECTAR"
-    echo "3) BYPASS (restaurar originales y eliminar backup)"
+    echo "3) BYPASS (restaurar originales)"
     echo "4) DESCONECTAR"
     echo "5) SALIR"
     echo "============================="
