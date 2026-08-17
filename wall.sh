@@ -72,8 +72,8 @@ inyectar() {
     fi
 
     info "Abriendo Free Fire..."
-    adb shell am start -n $PACKAGE/.SplashActivity 2>/dev/null
-    [ $? -eq 0 ] && success "Free Fire iniciado" || warning "No se pudo abrir"
+    adb shell monkey -p $PACKAGE -c android.intent.category.LAUNCHER 1 2>/dev/null
+    success "Free Fire iniciado (monkey)"
     read -p "Enter..."
 }
 
