@@ -56,24 +56,62 @@ inyectar() {
     info "Deteniendo $PACKAGE..."
     adb shell am force-stop $PACKAGE
 
-    info "Borrando carpeta vieja en $DATA_PATH ..."
-    adb shell "rm -rf $DATA_PATH" 2>/dev/null
-
-    info "Copiando $REPO_PATH a $DATA_PATH ..."
+    info "Creando directorio $DATA_PATH (si no existe)..."
     adb shell "mkdir -p $DATA_PATH"
-    adb push "$REPO_PATH/"* "$DATA_PATH/" 2>/dev/null
+
+    info "Copiando TODOS los archivos de $REPO_PATH a $DATA_PATH (sobrescribiendo)..."
+    adb push "$REPO_PATH/." "$DATA_PATH/" 2>/dev/null
 
     if [ $? -eq 0 ]; then
-        success "Inyeccion completada en $DATA_PATH"
+        success "Todos los archivos copiados correctamente"
     else
-        warning "Error al copiar archivos"
-        read -p "Enter..."
-        return 1
+        warning "Error al copiar algunos archivos"
     fi
+
+    # Mostrar los archivos copiados (incluye los bypass sin extensión)
+    info "Archivos copiados en $DATA_PATH:"
+    adb shell "ls -la $DATA_PATH" 2>/dev/null
 
     info "Abriendo Free Fire..."
     adb shell monkey -p $PACKAGE -c android.intent.category.LAUNCHER 1 2>/dev/null
-    success "Free Fire iniciado (monkey)"
+    success "Free Fire iniciado"
+    read -p "Enter..."
+}
+
+bypass() {
+    clear
+    echo "=========== BYPASS ==========="
+    [ $CONNECTED -eq 0 ] && warning "Conectate primero" && read -p "Enter..." && return 1
+
+    if [ -f "$REPO_PATH/bypass.sh" ]; then
+        info "Subiendo y ejecutando bypass.sh ..."
+        adb push "$REPO_PATH/bypass.sh" /data/local/tmp/
+        adb shell chmod +x /data/local/tmp/bypass.sh
+        adb shell sh /data/local/tmp/bypass.sh
+        success "Bypass ejecutado"
+    else
+        warning "No se encontró bypass.sh. Aplicando comandos genéricos..."
+        adb shell settings put global hidden_api_policy 1
+        adb shell setprop persist.sys.debuggable 1
+        success "Comandos genéricos aplicados"
+    fi
+    read -p "Enter..."
+}
+
+reiniciar() {
+    clear
+    echo "=========== REINICIAR ==========="
+    [ $CONNECTED -eq 0 ] && warning "Conectate primero" && read -p "Enter..." && return 1
+    info "Reiniciando dispositivo..."
+    adb reboot
+    success "Reinicio enviado"
+    CONNECTED=0
+    DEVICE_IP=""
+    read -p "Enter..."
+}
+
+desconectar() {
+    [ $CONNECTED -eq 1 ] && adb disconnect $DEVICE_IP:$CONNECT_PORT && CONNECTED=0 && success "Desconectado" || warning "No conectado"
     read -p "Enter..."
 }
 
@@ -90,7 +128,7 @@ menu() {
     echo
     echo "=========== MENU ==========="
     echo "1) CONECTAR"
-    echo "2) INYECTAR"
+    echo "2) INYECTAR (todos los archivos)"
     echo "3) BYPASS"
     echo "4) REINICIAR"
     echo "5) DESCONECTAR"
@@ -100,18 +138,13 @@ menu() {
     case $op in
         1) conectar ;;
         2) inyectar ;;
-        3) echo "Bypass no implementado"; sleep 1 ;;
-        4) [ $CONNECTED -eq 1 ] && adb reboot && success "Reinicio enviado" || warning "Conectate primero"; sleep 1 ;;
+        3) bypass ;;
+        4) reiniciar ;;
         5) desconectar ;;
         6) exit 0 ;;
         *) warning "Invalida"; sleep 1 ;;
     esac
     menu
-}
-
-desconectar() {
-    [ $CONNECTED -eq 1 ] && adb disconnect $DEVICE_IP:$CONNECT_PORT && CONNECTED=0 && success "Desconectado" || warning "No conectado"
-    sleep 1
 }
 
 check_deps
