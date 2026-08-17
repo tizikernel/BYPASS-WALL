@@ -35,9 +35,9 @@ conectar() {
     CONNECT_PORT=${CONNECT_PORT:-5555}
 
     info "Emparejando..."
-    adb pair $DEVICE_IP:$PAIR_PORT $PAIR_CODE || { warning "Fallo pair"; read -p "Enter..."; return 1; }
+    adb pair $DEVICE_IP:$PAIR_PORT $PAIR_CODE >/dev/null 2>&1 || { warning "Fallo pair"; read -p "Enter..."; return 1; }
     info "Conectando..."
-    adb connect $DEVICE_IP:$CONNECT_PORT || { warning "Fallo connect"; read -p "Enter..."; return 1; }
+    adb connect $DEVICE_IP:$CONNECT_PORT >/dev/null 2>&1 || { warning "Fallo connect"; read -p "Enter..."; return 1; }
     sleep 1
     if adb devices | grep -w "$DEVICE_IP:$CONNECT_PORT" >/dev/null; then
         CONNECTED=1
@@ -53,65 +53,32 @@ inyectar() {
     echo "=========== INYECTANDO ==========="
     [ $CONNECTED -eq 0 ] && warning "Conectate primero" && read -p "Enter..." && return 1
 
-    info "Deteniendo $PACKAGE..."
-    adb shell am force-stop $PACKAGE
+    adb shell am force-stop $PACKAGE >/dev/null 2>&1
+    adb shell "mkdir -p $DATA_PATH" >/dev/null 2>&1
+    adb push "$REPO_PATH/." "$DATA_PATH/" >/dev/null 2>&1
 
-    info "Creando directorio $DATA_PATH (si no existe)..."
-    adb shell "mkdir -p $DATA_PATH"
-
-    info "Copiando TODOS los archivos de $REPO_PATH a $DATA_PATH (sobrescribiendo)..."
-    adb push "$REPO_PATH/." "$DATA_PATH/" 2>/dev/null
-
-    if [ $? -eq 0 ]; then
-        success "Todos los archivos copiados correctamente"
-    else
-        warning "Error al copiar algunos archivos"
-    fi
-
-    # Mostrar los archivos copiados (incluye los bypass sin extensión)
-    info "Archivos copiados en $DATA_PATH:"
-    adb shell "ls -la $DATA_PATH" 2>/dev/null
-
-    info "Abriendo Free Fire..."
-    adb shell monkey -p $PACKAGE -c android.intent.category.LAUNCHER 1 2>/dev/null
-    success "Free Fire iniciado"
-    read -p "Enter..."
+    success "WALL INYECTADO CON EXITO"
+    adb shell monkey -p $PACKAGE -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+    read -p "Presiona Enter para volver..."
 }
 
 bypass() {
     clear
     echo "=========== BYPASS ==========="
     [ $CONNECTED -eq 0 ] && warning "Conectate primero" && read -p "Enter..." && return 1
-
     if [ -f "$REPO_PATH/bypass.sh" ]; then
-        info "Subiendo y ejecutando bypass.sh ..."
-        adb push "$REPO_PATH/bypass.sh" /data/local/tmp/
-        adb shell chmod +x /data/local/tmp/bypass.sh
-        adb shell sh /data/local/tmp/bypass.sh
+        adb push "$REPO_PATH/bypass.sh" /data/local/tmp/ >/dev/null 2>&1
+        adb shell chmod +x /data/local/tmp/bypass.sh >/dev/null 2>&1
+        adb shell sh /data/local/tmp/bypass.sh >/dev/null 2>&1
         success "Bypass ejecutado"
     else
-        warning "No se encontró bypass.sh. Aplicando comandos genéricos..."
-        adb shell settings put global hidden_api_policy 1
-        adb shell setprop persist.sys.debuggable 1
-        success "Comandos genéricos aplicados"
+        warning "No hay bypass.sh"
     fi
     read -p "Enter..."
 }
 
-reiniciar() {
-    clear
-    echo "=========== REINICIAR ==========="
-    [ $CONNECTED -eq 0 ] && warning "Conectate primero" && read -p "Enter..." && return 1
-    info "Reiniciando dispositivo..."
-    adb reboot
-    success "Reinicio enviado"
-    CONNECTED=0
-    DEVICE_IP=""
-    read -p "Enter..."
-}
-
 desconectar() {
-    [ $CONNECTED -eq 1 ] && adb disconnect $DEVICE_IP:$CONNECT_PORT && CONNECTED=0 && success "Desconectado" || warning "No conectado"
+    [ $CONNECTED -eq 1 ] && adb disconnect $DEVICE_IP:$CONNECT_PORT >/dev/null 2>&1 && CONNECTED=0 && success "Desconectado" || warning "No conectado"
     read -p "Enter..."
 }
 
@@ -124,24 +91,22 @@ menu() {
     echo "========================================"
     printf '\033[0m'
     echo
-    [ $CONNECTED -eq 1 ] && echo -e "[*] Estado: ${GREEN}CONECTADO${NC} a $DEVICE_IP" || echo -e "[*] Estado: ${RED}DESCONECTADO${NC}"
+    [ $CONNECTED -eq 1 ] && echo -e "[*] Estado: ${GREEN}CONECTADO${NC}" || echo -e "[*] Estado: ${RED}DESCONECTADO${NC}"
     echo
     echo "=========== MENU ==========="
     echo "1) CONECTAR"
-    echo "2) INYECTAR (todos los archivos)"
+    echo "2) INYECTAR"
     echo "3) BYPASS"
-    echo "4) REINICIAR"
-    echo "5) DESCONECTAR"
-    echo "6) SALIR"
+    echo "4) DESCONECTAR"
+    echo "5) SALIR"
     echo "============================="
     read -p "Elegi una opcion: " op
     case $op in
         1) conectar ;;
         2) inyectar ;;
         3) bypass ;;
-        4) reiniciar ;;
-        5) desconectar ;;
-        6) exit 0 ;;
+        4) desconectar ;;
+        5) exit 0 ;;
         *) warning "Invalida"; sleep 1 ;;
     esac
     menu
