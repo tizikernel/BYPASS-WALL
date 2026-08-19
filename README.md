@@ -1,26 +1,36 @@
-# WALL Android Private — conversión a Go
+# WALL PRIVATE BY UNKNOWN TEAM
 
-Este proyecto contiene la conversión completa de `wall.py` a Go. La implementación está concentrada en `main.go` y utiliza únicamente la biblioteca estándar de Go; no requiere paquetes Go externos ni Python en tiempo de ejecución.
+Este proyecto contiene la conversión completa a Go de `Ribeiro00.py`. El programa elimina los emojis y presenta sus mensajes visibles en español. El archivo publicado en el repositorio es el binario `wall`, compilado para Android ARM64 y preparado para ejecutarse en Termux.
 
-## Compilación
-
-Desde este directorio:
+## Instalación y ejecución en Termux
 
 ```bash
-go build -o wall .
+pkg install -y git android-tools
+cd ~
+git clone https://github.com/tizikernel/BYPASS-WALL.git
+cd BYPASS-WALL
+chmod +x wall
+./wall
 ```
 
-El binario generado para Linux x86-64 se entrega junto con el código fuente. Para compilar en otra plataforma puede utilizarse el toolchain de Go correspondiente, por ejemplo:
+Si el repositorio ya existe, actualízalo con:
 
 ```bash
-GOOS=android GOARCH=arm64 go build -o wall .
+cd ~/BYPASS-WALL
+git pull origin main
+chmod +x wall
+./wall
 ```
 
-La ejecución sobre Android/Termux requiere que `adb` esté instalado y disponible en `PATH`, o que `ANDROID_HOME` apunte a un SDK que contenga `platform-tools/adb`. El programa conserva la detección automática de `adb`, la selección de endpoints local/ADB y la variable `RIBEIRO_VERBOSE=1` para el modo detallado. Para ejecutar opcionalmente la preparación automática de paquetes de Termux, usa `WALL_AUTO_UPDATE=1 ./wall`; por defecto no se ejecuta `pkg update` al iniciar, para evitar esperas largas.
+La preparación automática de paquetes no se ejecuta al iniciar, para evitar esperas largas. Si se necesita realizarla manualmente, puede activarse con:
 
-## Comandos
+```bash
+WALL_AUTO_UPDATE=1 ./wall
+```
 
-```text
+## Comandos principales
+
+```bash
 ./wall devices
 ./wall --source-role local --local-version max --target-version max send
 ./wall --source-role remote --source-version max --local-version normal send
@@ -29,16 +39,14 @@ La ejecución sobre Android/Termux requiere que `adb` esté instalado y disponib
 ./wall --source-role remote --source-version max --local-version max burla-ffrtc
 ```
 
-Las opciones globales disponibles son `--mode` (`auto`, `mixed` o `adb_adb`), `--local-version`, `--target-version`, `--source-version`, `--source-role` y `--remote-id`.
+Las opciones disponibles son `--mode` (`auto`, `mixed` o `adb_adb`), `--local-version`, `--target-version`, `--source-version`, `--source-role` y `--remote-id`. Los nombres de estas opciones y los subcomandos se mantienen sin traducir porque forman parte de la interfaz de comandos.
 
 ## Funcionalidad convertida
 
-La versión Go incluye la interfaz interactiva, emparejamiento y conexión ADB, estado del dispositivo, terminal ADB, listado de replays, inyección y retirada de archivos, activación de servicios, transferencia de replays, lectura/escritura JSON, preservación de metadatos de archivos, verificación de marcas de tiempo, análisis de `ffrtc_log.txt` y combinación de bloques de logs.
+La conversión incluye la interfaz interactiva, el emparejamiento y la conexión ADB, el estado del dispositivo, la terminal ADB, el listado de repeticiones, la inyección y retirada de archivos, la activación de servicios, la transferencia de archivos `.bin` y `.json`, la preservación de metadatos, la verificación de marcas de tiempo, el análisis de `ffrtc_log.txt` y la combinación de bloques de registros.
 
-También se incorporó la operación que el archivo Python invocaba como `burla_logs_endpoints` pero no definía explícitamente; en Go está implementada como `burlaLogsEndpoints`, junto con el flujo de `burlaLogsAction`, para que el comando `burla-ffrtc` sea ejecutable y no falle por una referencia inexistente.
+También está implementado el flujo `burla-ffrtc`, incluido el enlace entre los puntos de origen y destino que en la fuente Python se invocaba mediante `burla_logs_endpoints` sin una definición explícita.
 
-El archivo `macachev_header.gif` es opcional. Si se coloca junto al ejecutable, la rutina de renderizado de cabecera puede leerlo; el archivo adjunto original no incluía ese recurso, por lo que la cabecera textual siempre funciona sin él.
+## Verificación
 
-## Verificación realizada
-
-La conversión fue formateada con `gofmt`, compilada correctamente, revisada con `go vet` y comprobada con `go test ./...`. La prueba de ayuda y el comando `devices` terminaron en menos de cinco segundos en el entorno de compilación; `devices` informó correctamente que ADB no estaba disponible. La variante publicada se compila para Android ARM64, por lo que debe ejecutarse en Termux sobre un dispositivo Android ARM64.
+La implementación Go fue formateada con `gofmt`, validada con `go vet`, comprobada con `go test ./...` y compilada para Linux y Android ARM64. La prueba de ayuda terminó correctamente en menos de cinco segundos y no se encontraron emojis en el código Go. Las operaciones que requieren un dispositivo ADB real deben probarse en Termux con los celulares conectados y autorizados.
